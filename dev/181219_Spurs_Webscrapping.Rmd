@@ -1,0 +1,48 @@
+---
+title: "Spurs!"
+author: "mbl"
+date: "December 19, 2018"
+output: 
+  html_document:
+    toc: true
+    toc_float: true
+    toc_depth: 2
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+##Intent:
+
+I am trying to pull Spurs football data from the FotMob website.  If successful, I might use this to then pull data for all EPL teams, but we will see.  I have tried this before, but wanted to start fresh and better document my approach.  My Goals for this  are (with some being stretch goals):
+
+*  Scrape individual game data - final score, lineup
+*  Scrape game facts - time of subs, who scored, who assisted, etc.
+*  Go back for entire 2018-2019 EPL and structure data for each match (format TBD)
+*  Automate process for future data pulls
+
+## Approach:
+
+### Initial Set up & Assesment
+
+* I opted to go straight to the Spurs section on the FotMob website for ease. I will need to revisit this if I try to grab data for other teams as well.
+* I used the Selector Gadget to assist in finding the correct sections
+* I had some initial trouble getting the correct html_nodes.  I tried ".fm-team__fixtures" based on selector gadget but that did not appear to work.
+```{r, echo = FALSE}
+# Packages
+library(rvest)
+library(dplyr)
+library(tidyr)
+library(XML)
+
+#Spurs Website
+spurs.webaddress <- 'https://www.fotmob.com/teams/8586/'
+
+spursTable <- read_html(spurs.webaddress) 
+
+
+```
+
+
+
