@@ -1,16 +1,19 @@
 ---
 title: "Spurs!"
-author: "mbl"
+author: "mleary"
 date: "December 19, 2018"
 output: 
   html_document:
     toc: true
     toc_float: true
-    toc_depth: 2
+    toc_depth: 4
+    code_folding: hide
 ---
 
 ```{r setup, include=FALSE}
+
 knitr::opts_chunk$set(echo = TRUE)
+knitr::opts_chunk$set(message = FALSE)
 ```
 
 ##Intent:
@@ -29,7 +32,8 @@ I am trying to pull Spurs football data from the FotMob website.  If successful,
 * I opted to go straight to the Spurs section on the FotMob website for ease. I will need to revisit this if I try to grab data for other teams as well.
 * I used the Selector Gadget to assist in finding the correct sections
 * I had some initial trouble getting the correct html_nodes.  I tried ".fm-team__fixtures" based on selector gadget but that did not appear to work.
-```{r, echo = FALSE}
+
+```{r}
 # Packages
 library(rvest)
 library(dplyr)
@@ -39,9 +43,47 @@ library(XML)
 #Spurs Website
 spurs.webaddress <- 'https://www.fotmob.com/teams/8586/'
 
-spursTable <- read_html(spurs.webaddress) 
+spursTable <- read_html(spurs.webaddress) %>% 
+  html_nodes("fm-team__list__item") #%>% 
+
+```
+
+* I decided to reverse my approach and work from lowest level on up.  I am going to scrape data for an invidual game and then work backwords
+
+```{r}
+single.game <- 'https://www.fotmob.com/livescores/2781956'
+
+nufc.game <- read_html(single.game)
+
+#
+home.events <- read_html(single.game) %>% 
+  html_nodes('.fm-match-event--home')
+
+write_xml(nufc.game, file= 'temp.html')
+```
+
+* Looking at the HTML code, the details I want are buried in javascript at the bottom of the file.  I haven't worked with Javascript before and don't feel like trying to Google that soltuion.  This makes a lot of sense, and explains past failures.
+
+### Changing Website
+* Due to the set up of the initial website, I am going to try another website and see if it is simpler.  Next attempt is with the Premiere League website.
+
+```{r}
+epl.site <- read_html('https://www.premierleague.com/match/38475') %>% 
+  html_nodes('.timeLineContainer') 
+
+write_xml(epl.site, file = 'temp2.html')
+```
+
+* New HTML file is cluttered, but looks like it will wor (view Temp2 file in directory.)
+* I'll work on one match again to make sure I can pull data, and then work up to scraping multiple matches
 
 
+```{r}
+spurs.match <- read_html('https://www.premierleague.com/match/38475') %>% 
+  html_nodes('.visuallyHidden')
+
+
+#write_xml(spurs.match, file = 'temp3.html')
 ```
 
 
