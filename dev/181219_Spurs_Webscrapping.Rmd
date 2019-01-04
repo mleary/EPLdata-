@@ -14,6 +14,7 @@ output:
 
 knitr::opts_chunk$set(echo = TRUE)
 knitr::opts_chunk$set(message = FALSE)
+
 ```
 
 ##Intent:
@@ -32,15 +33,13 @@ I am trying to pull Spurs football data from the FotMob website.  If successful,
 * I opted to go straight to the Spurs section on the FotMob website for ease. I will need to revisit this if I try to grab data for other teams as well.
 * I used the Selector Gadget to assist in finding the correct sections
 * I had some initial trouble getting the correct html_nodes.  I tried ".fm-team__fixtures" based on selector gadget but that did not appear to work.
-
 ```{r}
 # Packages
+library(tidyverse)
 library(rvest)
-library(dplyr)
-library(tidyr)
 library(XML)
 
-#Spurs Website
+ #Spurs Website
 spurs.webaddress <- 'https://www.fotmob.com/teams/8586/'
 
 spursTable <- read_html(spurs.webaddress) %>% 
@@ -64,8 +63,9 @@ write_xml(nufc.game, file= 'temp.html')
 
 * Looking at the HTML code, the details I want are buried in javascript at the bottom of the file.  I haven't worked with Javascript before and don't feel like trying to Google that soltuion.  This makes a lot of sense, and explains past failures.
 
-### Changing Website
-* Due to the set up of the initial website, I am going to try another website and see if it is simpler.  Next attempt is with the Premiere League website.
+### Changing Websites
+
+* Due to the set up of the initial website, I am going to try another website and see if it is simpler.  Next attempt is with the actual Premiere League website.
 
 ```{r}
 epl.site <- read_html('https://www.premierleague.com/match/38475') %>% 
@@ -74,17 +74,299 @@ epl.site <- read_html('https://www.premierleague.com/match/38475') %>%
 write_xml(epl.site, file = 'temp2.html')
 ```
 
-* New HTML file is cluttered, but looks like it will wor (view Temp2 file in directory.)
+* New HTML file is cluttered, but looks like it will work (view Temp2 file in dev)
+
 * I'll work on one match again to make sure I can pull data, and then work up to scraping multiple matches
 
+* Ideally I want to also pull starting lineus along wiht Match data
 
 ```{r}
 spurs.match <- read_html('https://www.premierleague.com/match/38475') %>% 
-  html_nodes('.visuallyHidden')
+  html_nodes('.timeLineContainer')
+
+event.info <- spurs.match %>% 
+        # The relevant tag
+        html_nodes('.eventInfo') %>% 
+        html_text() %>% 
+        # Trim additional white space
+        str_trim() %>%                       
+        # Convert the list into a vector
+        unlist()
 
 
-#write_xml(spurs.match, file = 'temp3.html')
+min <- spurs.match %>% 
+        # The relevant tag
+        html_nodes('.min') %>% 
+        html_text() %>% 
+        # Trim additional white space
+        str_trim() %>%                       
+        # Convert the list into a vector
+        unlist()
+
+playerinfo <- spurs.match %>% 
+        # The relevant tag
+        html_nodes('.eventPlayerInfo') %>% 
+        html_text() %>% 
+        # Trim additional white space
+        str_trim() %>%                       
+        # Convert the list into a vector
+        unlist()
+
+team <- spurs.match %>% 
+        # The relevant tag
+        html_nodes('.team') %>% 
+        html_text() %>% 
+        # Trim additional white space
+        str_trim() %>%                       
+        # Convert the list into a vector
+        unlist()
+
+```
+
+* So I've found the nodes and started to understand the strucutre.  I don't want to repeat these chained operations, so I am going to try and create fucntions to pull the data. 
+
+* I've also decided to start with lineups data, since it is identical for every game.  I want to pull this first and make sure I can apply it to multiple games..
+
+```{r}
+
+web.lineups <- spurs.match %>% 
+  html_nodes(xpath = '//*[contains(concat( " ", @class, " " ), concat( " ", "matchLineupTeamContainer", " " ))] | //*[contains(concat( " ", @class, " " ), concat( " ", "matchTeamFormation", " " ))]')
+
+#formation
+homeformation <- web.lineups[1] %>% 
+  html_text() 
+
+awayformation <- web.lineups[3] %>% 
+  html_text() 
+
+#Lineups
+homeLineup <- web.lineups[2] %>% 
+  html_text() %>% 
+  sub(pattern= "Substitutes.*", replacement = "")
+
+web.lineups %>% html_text() %>% 
+        # Trim additional white space
+        str_trim() %>%                       
+        # Convert the list into a vector
+        unlist()
+
+```
+
+* After some initial attempts to just grab the entire fields and back into the lineup, I realized it was unwieldy.  I am pretty sure I need to create parsing functions, which I was trying to avoid.  Sigh.
+
+
+### Sub Component - Create Parsing Function for Lineups
+
+* After reviewng the EPL website, it seems to make sense to pull the lineup data seperataly and make that a function.
+
+```{r}
+
+xpath_lineups <- '//*[contains(concat( " ", @class, " " ), concat( " ", "matchLineupTeamContainer", " " ))] | //*[contains(concat( " ", @class, " " ), concat( " ", "matchTeamFormation", " " ))]'
+
+
+
+## Testing one componet first
+test <- web.lineups[[2]] %>% 
+  html_nodes('.player') %>%
+  html_text() %>% 
+  #str_replace('[0-9]+[:punct:]', "") %>% 
+  as.data.frame() %>% 
+  mutate(Position = word(., 4),
+         Name = word(., 2, 3),
+         Number = word(., 1),
+         Captain = ifelse(str_sub(Position, 1,1) == "C", TRUE, FALSE),
+         Position = str_replace(Position, "C",""),
+         Starter = ifelse(row_number() < 12,  TRUE, FALSE),
+         Home_Away = "Home") %>% 
+  select(-1)
+
+scrape_lineups <- function(html.input, xpath.input){
+  
+  lineups <- list()
+  html.input <- html.input %>% html_nodes(xpath = xpath.input)
+  
+  lineups$HomeFormation <- html.input[1] %>% html_text()
+  lineups$AwayFormation <- html.input[3] %>% html_text()
+  
+  lineups$HomeLineup <-html.input[[2]] %>% 
+    html_nodes('.player') %>%
+    html_text() %>% 
+    str_replace('[0-9]+[:punct:]', "") %>% 
+    as.data.frame() %>% 
+    mutate(Position = word(., -1),
+           Name = word(., 2, -2),
+           Number = word(., 1),
+           Captain = ifelse(str_sub(Position, 1,1) == "C", TRUE, FALSE),
+           Position = str_replace(Position, "C",""),
+           Starter = ifelse(row_number() < 12,  TRUE, FALSE),
+           Home_Away = "Home") %>% 
+    select(-1) 
+    
+  lineups$AwayLineup <-html.input[[4]] %>% 
+    html_nodes('.player') %>%
+    html_text() %>% 
+    str_replace('[0-9]+[:punct:]', "") %>% 
+    as.data.frame() %>% 
+    mutate(Position = word(., 4),
+           Name = word(., 2, 3),
+           Number = word(., 1),
+           Captain = ifelse(str_sub(Position, 1,1) == "C", TRUE, FALSE),
+           Position = str_replace(Position, "C",""),
+           Starter = ifelse(row_number() < 12,  TRUE, FALSE),
+           Home_Away = "Away") %>% 
+    select(-1) 
+  
+  return(lineups)
+}
+
+print(scrape_lineups(spurs.match, xpath_lineups))
+```
+
+* Boom!  This worked, although I have made a mess of variables and organization I realized. I think I'll just create a src file once I work through everything, and keep this as exploration.
+
+### Testing Scrape_Lineup Function for other matches
+
+* Since I can succesfully pull the lineup data, I want to see if it works across multiple games before I move forward with the more complicated match data.
+
+```{r}
+test.match <- read_html('https://www.premierleague.com/match/38487') %>% 
+  html_nodes('.timeLineContainer')
+
+print(scrape_lineups(test_match, xpath_lineups))
+##Success!
+
+test_match <- read_html('https://www.premierleague.com/match/38486') %>% 
+  html_nodes('.timeLineContainer')
+
+print(scrape_lineups(test_match, xpath_lineups))
+
+```
+
+* This worked.  Added bonus, the url format for the EPL website is structured sequentially based on game, so it should be easy to iterate over a series matches!
+
+* **Note I had to adjust my word() functions after I noticed that there are some players with 1 name.  I adjusted my indexing to grab the name as simply the middle word/words.**
+
+* One note of caution, messing around EPL site and I found some odd pages ('https://www.premierleague.com/match/34000')
+
+* I grabbed first match of 2018/2019 season while I was looking: 'https://www.premierleague.com/match/38313'
+
+
+### Back to scraping Game Details
+```{r}
+spurs.match %>% 
+  html_nodes('.eventInfo') %>% 
+  html_nodes('.name') %>% 
+  html_text()
+
+spurs.match %>% 
+  html_nodes('.eventInfo') %>%
+  html_nodes('.name') %>% 
+  html_text()
+
+spurs.match %>% 
+  html_nodes('.eventInfo') %>%
+  html_nodes('.visuallyHidden') %>% 
+  html_text() %>% 
+  .[. != "Substitution On"] %>% 
+  .[. != "Substitution Off"]
+
+spurs.match %>% 
+  html_nodes('.eventInfo') %>%
+  html_nodes('.teamScore') %>% 
+  html_text()
+
+
+### Trying to pull all .eventInfo and then parse data - not fun
+spurs.match %>%
+  html_nodes('.eventInfo') %>% 
+  html_text() %>% 
+  as.data.frame() %>% 
+  mutate(Time  = str_sub(., 1, regexpr("'", .)),
+         Event = str_sub(., regexpr("'", .) + 1, regexpr("[A-Z]{3}", .) - 1),
+         Score = str_sub(., regexpr("[A-Z]{3}", .), regexpr("[A-Z]{3}", .) + 13))
+            
+  
+```
+
+* After messing around, I think it will make sense to capture sub on/off time in lineup.  Starters will be assigened on at O minuntes.
+
+* I also think it will make sense to create helper functions wiht the correct html_paths and pull the data that way - it will probably be cleaner in the long run.
+
+
+### First attempt at putting it all together
+```{r}
+# Clear global environment and start fresh
+rm(list=ls())
+
+match <- 38483
+
+### Lineups Xpath
+path.lineups <- '//*[contains(concat( " ", @class, " " ), concat( " ", "matchLineupTeamContainer", " " ))] | //*[contains(concat( " ", @class, " " ), concat( " ", "matchTeamFormation", " " ))]'
+
+# Events CSS
+path.events <- '.timeLineContainer'
+
+
+scrape_epl_data <- function(match, path.lineups, path.events) {
+  
+  match.details <- list()
+  
+  matchlink <- paste0('https://www.premierleague.com/match/', match) %>% 
+    read_html()
+  
+  scrape_lineups <- function(html.input, xpath.input){
+  
+      lineups <- list()
+      html.input <- html.input %>% html_nodes(xpath = xpath.input)
+      
+      lineups$HomeFormation <- html.input[1] %>% html_text()
+      lineups$AwayFormation <- html.input[3] %>% html_text()
+      
+      lineups$HomeLineup <-html.input[[2]] %>% 
+        html_nodes('.player') %>%
+        html_text() %>% 
+        str_replace('[0-9]+[:punct:]', "") %>% 
+        as.data.frame() %>% 
+        mutate(Position = word(., -1),
+               Name = word(., 2, -2),
+               Number = word(., 1),
+               Captain = ifelse(str_sub(Position, 1,1) == "C", TRUE, FALSE),
+               Position = str_replace(Position, "C",""),
+               Starter = ifelse(row_number() < 12,  TRUE, FALSE),
+               Home_Away = "Home") %>% 
+        select(-1) 
+        
+      lineups$AwayLineup <- html.input[[4]] %>% 
+        html_nodes('.player') %>%
+        html_text() %>% 
+        #str_replace('[0-9]+[:punct:]', "") %>% 
+        as.data.frame() %>% 
+        mutate(Position = word(., 4),
+               Name = word(., 2, 3),
+               Number = word(., 1),
+               Captain = ifelse(str_sub(Position, 1,1) == "C", TRUE, FALSE),
+               Position = str_replace(Position, "C",""),
+               Starter = ifelse(row_number() < 12,  TRUE, FALSE),
+               Home_Away = "Away") %>% 
+        select(-1) %>% 
+        mutate(TimeOn = ifelse(Starter == TRUE, 0,
+                          ifelse(length(str_extract(., '[0-9]+[:punct:]'))) > 0, str_extract(., '[0-9]+[:punct:]'), NA))
+      
+               TimeOff = ifelse(TimeOn == NULL, NULL, "Test")
+                          #ifelse()))
+        )
+      
+      return(lineups)
+  }
+  
+  match.details$line.ups <- scrape_lineups(matchlink, path.lineups)
+  
+}
+
+test <- scrape_epl_data(match = match, path.lineups = path.lineups, path.events = path.events)
 ```
 
 
+###General Notes
 
+* I might want to update Starter column with two fields for On and Off, to address subs later
