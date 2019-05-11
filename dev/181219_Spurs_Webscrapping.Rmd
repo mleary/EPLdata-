@@ -295,9 +295,8 @@ spurs.match %>%
 
 ### First attempt at putting it all together
 ```{r}
-# Clear global environment and start fresh
-rm(list=ls())
 
+#Test match
 match <- 38483
 
 ### Lineups Xpath
@@ -306,64 +305,56 @@ path.lineups <- '//*[contains(concat( " ", @class, " " ), concat( " ", "matchLin
 # Events CSS
 path.events <- '.timeLineContainer'
 
+matchlink <- paste0('https://www.premierleague.com/match/', match) %>% 
+  read_html()
+  
+scrape_lineups <- function(match.page, path.lineups) {
 
-scrape_epl_data <- function(match, path.lineups, path.events) {
-  
-  match.details <- list()
-  
-  matchlink <- paste0('https://www.premierleague.com/match/', match) %>% 
-    read_html()
-  
-  scrape_lineups <- function(html.input, xpath.input){
-  
-      lineups <- list()
-      html.input <- html.input %>% html_nodes(xpath = xpath.input)
+    lineups <- list()
+    match.page <- match.page %>% html_nodes(xpath = path.lineups)
+    
+    lineups$HomeFormation <- html.input[1] %>% html_text()
+    lineups$AwayFormation <- html.input[3] %>% html_text()
+    
+    lineups$HomeLineup <-html.input[[2]] %>% 
+      html_nodes('.player') %>%
+      html_text() %>% 
+      str_replace('[0-9]+[:punct:]', "") %>% 
+      as.data.frame() %>% 
+      mutate(Position = word(., -1),
+             Name = word(., 2, -2),
+             Number = word(., 1),
+             Captain = ifelse(str_sub(Position, 1,1) == "C", TRUE, FALSE),
+             Position = str_replace(Position, "C",""),
+             Starter = ifelse(row_number() < 12,  TRUE, FALSE),
+             Home_Away = "Home") %>% 
+      select(-1) 
       
-      lineups$HomeFormation <- html.input[1] %>% html_text()
-      lineups$AwayFormation <- html.input[3] %>% html_text()
-      
-      lineups$HomeLineup <-html.input[[2]] %>% 
-        html_nodes('.player') %>%
-        html_text() %>% 
-        str_replace('[0-9]+[:punct:]', "") %>% 
-        as.data.frame() %>% 
-        mutate(Position = word(., -1),
-               Name = word(., 2, -2),
-               Number = word(., 1),
-               Captain = ifelse(str_sub(Position, 1,1) == "C", TRUE, FALSE),
-               Position = str_replace(Position, "C",""),
-               Starter = ifelse(row_number() < 12,  TRUE, FALSE),
-               Home_Away = "Home") %>% 
-        select(-1) 
-        
-      lineups$AwayLineup <- html.input[[4]] %>% 
-        html_nodes('.player') %>%
-        html_text() %>% 
-        #str_replace('[0-9]+[:punct:]', "") %>% 
-        as.data.frame() %>% 
-        mutate(Position = word(., 4),
-               Name = word(., 2, 3),
-               Number = word(., 1),
-               Captain = ifelse(str_sub(Position, 1,1) == "C", TRUE, FALSE),
-               Position = str_replace(Position, "C",""),
-               Starter = ifelse(row_number() < 12,  TRUE, FALSE),
-               Home_Away = "Away") %>% 
-        select(-1) %>% 
-        mutate(TimeOn = ifelse(Starter == TRUE, 0,
-                          ifelse(length(str_extract(., '[0-9]+[:punct:]'))) > 0, str_extract(., '[0-9]+[:punct:]'), NA))
-      
-               TimeOff = ifelse(TimeOn == NULL, NULL, "Test")
-                          #ifelse()))
-        )
-      
-      return(lineups)
-  }
-  
-  match.details$line.ups <- scrape_lineups(matchlink, path.lineups)
-  
+    lineups$AwayLineup <- html.input[[4]] %>% 
+      html_nodes('.player') %>%
+      html_text() %>% 
+      #str_replace('[0-9]+[:punct:]', "") %>% 
+      as.data.frame() %>% 
+      mutate(Position = word(., 4),
+             Name = word(., 2, 3),
+             Number = word(., 1),
+             Captain = ifelse(str_sub(Position, 1,1) == "C", TRUE, FALSE),
+             Position = str_replace(Position, "C",""),
+             Starter = ifelse(row_number() < 12,  TRUE, FALSE),
+             Home_Away = "Away") %>% 
+      select(-1) %>% 
+      mutate(TimeOn = ifelse(Starter == TRUE, 0,
+                        ifelse(length(str_extract(., '[0-9]+[:punct:]'))) > 0, str_extract(., '[0-9]+[:punct:]'), NA))
+             
+            # TimeOff = ifelse(TimeOn == NULL, NULL, "Test")
+            #             #ifelse()))
+            # 
+    
+    return(lineups)
 }
 
-test <- scrape_epl_data(match = match, path.lineups = path.lineups, path.events = path.events)
+
+test <- 
 ```
 
 

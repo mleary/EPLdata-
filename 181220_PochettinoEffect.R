@@ -8,6 +8,7 @@
 
 library(tidyverse)
 library(ggthemes)
+library(lubridate)
 
 ## Load Team data
 poch_start <- as.Date('2014-05-27')
@@ -54,6 +55,7 @@ end_labels <- end_labels[!duplicated(end_labels$Club),] %>%
 
 ## Plot
 ggplot(combined_teams, aes(x = To, y = Elo, color = Club)) +
+  #geom_smooth(size = 1.5, span = 0.1) +
   geom_line(size = 1.5) +
   geom_text(data = start_labels, aes(x = x_position, y = Elo, label = Club, size = 2.75)) +
   geom_text(data = end_labels, aes(x = x_position, y = Elo, label = Club, size =  2.75)) +
